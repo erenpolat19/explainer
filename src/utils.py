@@ -48,8 +48,7 @@ def eval_acc(clf_model, expl_model, dataloader, device, args, v=False):
             y_pred = masked_pred.argmax(dim=1)
             correct += int((y_pred == y_target).sum())
             
-    print('mask:', expl_mask.sum(), 'graph:', edge_index[0].shape)
-    
+        print('mask:', expl_mask.sum(), 'graph:', edge_index[0].shape)
     return correct / len(dataloader.dataset)
     
 

@@ -111,10 +111,12 @@ def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, t
         val_roc = eval_explain(clf_model, factual_explainer, val_loader, device)
 
         print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}, Val_acc: {val_acc},  Train_acc: {train_acc}")
-        print(f'Training ROC-AUC: ')
+        print(f'Training ROC: {train_roc}, Val ROC: {val_roc}')
+        print()
 
-    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args, v=True)
-    print(f"Final Test_acc: {test_acc}")
+    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args, v=False)
+    test_roc = eval_explain(clf_model, factual_explainer, val_loader, device)
+    print(f"Final Test_acc: {test_acc}, Test_roc: {test_roc}")
 
 def run(args):
     device = "cpu"

@@ -1,7 +1,8 @@
 from data_preprocessing import *
 from visualize import *
 
-data = preprocess_ba_2motifs('ba2-web-groundt')
+dataset_name= 'BA-2motif'
+data = preprocess_ba_2motifs(dataset_name)
 train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=64, val_split=0.1, test_split=0.1)
 device = 'cpu'
 

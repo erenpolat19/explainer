@@ -39,45 +39,20 @@ def load_ba_2motifs(dataset_name):
         adjs, features, labels = pkl.load(fin)
     return adjs, features, labels
 
-def preprocess_from_web(dataset_name):
-    dense_edges, node_features, graph_labels = load_ba_2motifs(dataset_name)
-    data_list = []
-    for graph_idx in range(dense_edges.shape[0]):
-        x = torch.from_numpy(node_features[graph_idx]).float()
-        edge_index = dense_to_sparse(torch.from_numpy(dense_edges[graph_idx]))[0]
-        y = torch.from_numpy(np.where(graph_labels[graph_idx])[0]).reshape(-1, 1).long()
-
-        node_label = torch.zeros(x.shape[0]).long()
-        node_label[20:] = 1
-        edge_label = ((edge_index[0] >= 20) & (edge_index[0] < 25) & (edge_index[1] >= 20) & (edge_index[1] < 25)).long()
-        y = y.squeeze()
-        data_list.append(Data(x=x, edge_index=edge_index, y=y, node_label=node_label, edge_label=edge_label))
-
-    return data_list
-
 def preprocess_ba_2motifs(dataset_name):
     adjs, features, labels = load_ba_2motifs(dataset_name)
     
-    adj_all = []            # List to store adjacency matrices
-    features_all = []       # List to store feature matrices
-    labels_all = []         # List to store labels
-    edge_indices_all = []
-    
-    for i in range(len(adjs)):
-        adj = adjs[i]
-        feature = features[i]
-        label = labels[i]
-
-        adj_all.append(adj)
-        features_all.append(feature)
-        labels_all.append(label)
-    
     edge_indices_all = adj_to_edge_index(adjs)
 
-    return [Data(x=torch.tensor(features_all[i], dtype=torch.float), 
+    graphs = []
+    for i in range(len(adjs)):
+        edge_label = ((edge_indices_all[i][0] >= 20) & (edge_indices_all[i][0] < 25) & (edge_indices_all[i][1] >= 20) & (edge_indices_all[i][1] < 25))
+        graph = Data(x=torch.tensor(features[i], dtype=torch.float), 
                  edge_index=torch.tensor(edge_indices_all[i], dtype=torch.long),
-                 y=torch.tensor(labels_all[i], dtype=torch.float).argmax()) 
-            for i in range(len(adjs))]
+                 y=torch.tensor(labels[i], dtype=torch.float).argmax(), edge_label = torch.tensor(edge_label, dtype=torch.long))
+        graphs.append(graph)
+    return graphs
+    
 
 
 """

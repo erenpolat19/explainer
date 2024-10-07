@@ -25,7 +25,7 @@ dataset2 = ExplainerDataset(
 graphs = []
 for data in dataset1:
     graphs.append(Data(x=0.1000 * torch.ones((25,10), dtype=torch.float), edge_index=data.edge_index, edge_label=data.edge_mask,
-                             y=torch.zeros((1,), dtype=torch.long)))
+                             y=torch.ones((1,), dtype=torch.long)))
 
 for data in dataset2:
     graphs.append(Data(x=0.1000 * torch.ones((25,10), dtype=torch.float), edge_index=data.edge_index, edge_label=data.edge_mask,

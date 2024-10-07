@@ -52,6 +52,7 @@ def extract_individual_graphs(batch, expl_mask):
 
     return graphs, expl_masks_split
 
+
 def visualize(graphs, expl_masks_split, top_k):
     for i, graph_data in enumerate(graphs):
         # Create a NetworkX graph
@@ -65,33 +66,66 @@ def visualize(graphs, expl_masks_split, top_k):
         edges = graph_data['edges'].t().tolist()
         G.add_edges_from(edges)
 
-        # Set up the plot
-        plt.figure(figsize=(6, 6))
-        pos = nx.spring_layout(G) 
+        # Create a dictionary to store the maximum mask value for each undirected edge
+        edge_importance = {}
+
+        # Fill the edge_importance dictionary with the maximum values for (u, v) and (v, u)
+        expl_mask = expl_masks_split[i]
+        for idx, (u, v) in enumerate(edges):
+            # Sort the edge to treat (u, v) and (v, u) the same
+            edge_key = tuple(sorted((u, v)))
+            if edge_key not in edge_importance:
+                edge_importance[edge_key] = expl_mask[idx]
+            else:
+                # Take the maximum mask value for the undirected edge
+                edge_importance[edge_key] = max(edge_importance[edge_key], expl_mask[idx])
+
+        # Convert edge_importance dict to lists for plotting
+        all_edges = list(edge_importance.keys())
+        all_importances = list(edge_importance.values())
+
+        # Sort edges by importance to get top-k
+        sorted_indices = sorted(range(len(all_importances)), key=lambda k: all_importances[k], reverse=True)
+        top_k_indices = sorted_indices[:top_k]
+
+        top_k_edges = [all_edges[idx] for idx in top_k_indices]
+        top_k_importances = [all_importances[idx] for idx in top_k_indices]
+
+        # Non-top-k edges
+        non_top_k_edges = [all_edges[idx] for idx in sorted_indices[top_k:]]
         
+        # Create a spring layout for consistent node positions
+        pos = nx.spring_layout(G)
+
+        # Set up subplots
+        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+
         # Draw nodes
-        nx.draw_networkx_nodes(G, pos, node_size=20, node_color="lightblue", alpha=0.9)
+        node_options = {
+            'node_size': 20,
+            'node_color': 'lightblue',
+            'alpha': 0.9
+        }
 
-        # Draw edges
-        edge_colors = 'black'
-        expl_mask = expl_masks_split[i]  # Use the explanation mask corresponding to this graph
-        sorted_indices = expl_mask.argsort(descending=True)
-        top_k_indices = sorted_indices[:top_k]  # Get indices of top k edges
-        top_k_edges = [edges[idx] for idx in top_k_indices]
-        top_k_mask = expl_mask[top_k_indices]  # Corresponding importance values
+        # Plot 1: Entire Graph (Black and Red Edges)
+        nx.draw_networkx_nodes(G, pos, ax=axs[0], **node_options)
+        # Color edges: red for top-k, black for the rest
+        nx.draw_networkx_edges(G, pos, edgelist=all_edges, edge_color=['red' if edge in top_k_edges else 'black' for edge in all_edges], ax=axs[0])
+        axs[0].set_title(f'Graph {i+1}: Full (Black + Red)', fontsize=16)
+        axs[0].axis('off')
 
-        non_top_k_indices = sorted_indices[top_k:]
-        non_top_k_edges = [edges[idx] for idx in non_top_k_indices]
+        # Plot 2: Only Non-Top K Edges (Black Edges)
+        nx.draw_networkx_nodes(G, pos, ax=axs[1], **node_options)
+        nx.draw_networkx_edges(G, pos, edgelist=all_edges, edge_color=['black' if edge in non_top_k_edges else 'lightgray' for edge in all_edges], ax=axs[1])
+        axs[1].set_title(f'Graph {i+1}: Black Edges', fontsize=16)
+        axs[1].axis('off')
 
-        # Add the top k edges to the graph
-        G.add_edges_from(top_k_edges)
-        edge_colors = plt.cm.Reds(top_k_mask) 
-        nx.draw_networkx_edges(G, pos, edgelist=non_top_k_edges, edge_color='black')
-        nx.draw_networkx_edges(G, pos, edgelist=top_k_edges, edge_color='red')
-        
-        # Title
-        plt.title(f'Graph {i+1}', fontsize=16)
-        plt.axis('off')  
+        # Plot 3: Only Top K Important Edges (Red Edges)
+        nx.draw_networkx_nodes(G, pos, ax=axs[2], **node_options)
+        nx.draw_networkx_edges(G, pos, edgelist=all_edges, edge_color=['red' if edge in top_k_edges else 'lightgray' for edge in all_edges], edge_cmap=plt.cm.Reds, ax=axs[2])
+        axs[2].set_title(f'Graph {i+1}: Red Edges', fontsize=16)
+        axs[2].axis('off')
 
-        # Show the plot
+        # Show the subplots
+        plt.tight_layout()
         plt.show()

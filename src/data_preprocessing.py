@@ -35,24 +35,12 @@ Returns:
         - labels (list of numpy.ndarray): A list of labels associated with each graph.
 """
 def load_ba_2motifs(dataset_name):
-    with open(f'../dataset/BA-2motif/{dataset_name}', 'rb') as fin:
+    with open(f'../dataset/BA-2motif/{dataset_name}.pkl', 'rb') as fin:
         adjs, features, labels = pkl.load(fin)
     return adjs, features, labels
 
-"""
-Preprocess the BA-2motifs dataset.
-
-Args: 
-    dataset (str): Name of the dataset to be loaded. 
-    padded (bool): Set to True --> padding, False --> no padding.
-    save_falg (bool): Saves data if flag is set.
-
-Returns:
-    data (Pytorch Geometric Data object): Preprocessed data, also saved to .pt file.
-"""
-
-def preprocess_from_web():
-    dense_edges, node_features, graph_labels = load_ba_2motifs(dataset)
+def preprocess_from_web(dataset_name):
+    dense_edges, node_features, graph_labels = load_ba_2motifs(dataset_name)
     data_list = []
     for graph_idx in range(dense_edges.shape[0]):
         x = torch.from_numpy(node_features[graph_idx]).float()
@@ -69,9 +57,6 @@ def preprocess_from_web():
 
 def preprocess_ba_2motifs(dataset_name):
     adjs, features, labels = load_ba_2motifs(dataset_name)
-    
-    #Define max number of nodes
-    max_num_nodes = 30
     
     adj_all = []            # List to store adjacency matrices
     features_all = []       # List to store feature matrices
@@ -94,12 +79,19 @@ def preprocess_ba_2motifs(dataset_name):
                  y=torch.tensor(labels_all[i], dtype=torch.float).argmax()) 
             for i in range(len(adjs))]
 
-if __name__ == '__main__':
-    dataset = 'ba2motifs'
-    data = preprocess_ba_2motifs(dataset, padded=False)
-    train_loader, val_loader, test_loader = get_dataloaders(data)
-    
 
+"""
+Preprocess the BA-2motifs dataset.
+
+Args: 
+    dataset (str): Name of the dataset to be loaded. 
+    padded (bool): Set to True --> padding, False --> no padding.
+    save_falg (bool): Saves data if flag is set.
+
+Returns:
+    data (Pytorch Geometric Data object): Preprocessed data, also saved to .pt file.
+"""
+        #max_num_nodes = 30
         # # Skip graphs with more than max num nodes
         # if adj.shape[0] > max_num_nodes:
         #     continue

@@ -36,9 +36,8 @@ def test(loader, model, device):
 
 if __name__ == '__main__':
     device = 'cpu'
-    #dataset_name = 'BA-2motif-new'
-    dataset_name = 'ba2-generated'
-    data = preprocess_ba_2motifs(dataset_name, padded=False)
+    dataset_name = 'BA-2motif'
+    data = preprocess_ba_2motifs(dataset_name)
     train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=64, val_split=0.1, test_split=0.1)
 
     parser = argparse.ArgumentParser(description='')
@@ -67,4 +66,4 @@ if __name__ == '__main__':
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), 'clf-generated.pth')
+    torch.save(model.state_dict(), 'clf.pth')

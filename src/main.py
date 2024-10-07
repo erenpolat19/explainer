@@ -1,6 +1,5 @@
 import gcn
 from data_preprocessing import *
-from visualize import *
 from sklearn.metrics import roc_auc_score
 from utils import *
 
@@ -38,6 +37,26 @@ args = parser.parse_args()
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 
+def eval_explain(clf_model, expl_model, dataloader, device='cpu'):
+    expl_model.eval()
+    predictions = []
+    ground_explanations = []
+    for data in dataloader:  # Iterate in batches over the training/test dataset.
+        with torch.no_grad():
+            inputs = data.x.to(device), data.edge_index.to(device), data.y.to(device)
+            x, edge_index, y_target = inputs
+            edge_label = data.edge_label.to(device)
+            expl_mask = explain_inference(clf_model, expl_model, inputs)
+
+            assert expl_mask.shape == edge_label.shape
+
+            for idx in range(expl_mask.shape[0]):
+                predictions.append(expl_mask[idx].item())
+                ground_explanations.append(edge_label[idx].item())
+            
+    return roc_auc_score(ground_explanations, predictions)
+
+
 def loss_f(pred, target, mask, reg_coefs):
     
     scale = 0.99
@@ -48,34 +67,7 @@ def loss_f(pred, target, mask, reg_coefs):
     mask_ent_reg = -mask * torch.log(mask) - (1 - mask) * torch.log(1 - mask)
     mask_ent_loss = reg_coefs[1] * torch.mean(mask_ent_reg)
     
-    return cce_loss + size_loss + mask_ent_loss
-
-
-def eval_acc(clf_model, expl_model, dataloader, device, args, v=False):
-    expl_model.eval()
-    correct = 0
-    vis = False
-    for data in dataloader:  # Iterate in batches over the training/test dataset.
-        x, edge_index, y_target = data.x.to(device), data.edge_index.to(device), data.y.to(device)
-        
-        with torch.no_grad():
-            node_emb = clf_model.embedding(x, edge_index) # num_nodes x h_dim
-            edge_emb = create_edge_embed(node_emb, edge_index) # E x 2*h_dim
-            sampling_weights = expl_model(edge_emb)
-            expl_mask = sample_graph(sampling_weights, bias=0.0, training=False).squeeze()
-            if not vis and v:
-                graphs, expl_masks_split = extract_individual_graphs(data, expl_mask)
-                visualize(graphs, expl_masks_split, top_k=10)
-                vis = True
-            # Using the masked graph's edge weights
-            masked_pred = clf_model(x, edge_index, edge_weights = expl_mask, batch=data.batch)   # Graph-level prediction
-            y_pred = masked_pred.argmax(dim=1)
-            correct += int((y_pred == y_target).sum())
-            
-    print('mask:', expl_mask.sum(), 'graph:', edge_index[0].shape)
-    
-    return correct / len(dataloader.dataset)
-    
+    return cce_loss + size_loss + mask_ent_loss    
 
 def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args, temp=(5.0, 2.0)):
     temp_schedule = lambda e: temp[0] * ((temp[1] / temp[0]) ** (e / args.epochs))
@@ -113,8 +105,13 @@ def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, t
             total_loss_f += loss.item()
 
         val_acc = eval_acc(clf_model, factual_explainer, val_loader, device, args)
-        train_acc = eval_acc(clf_model, factual_explainer, val_loader, device, args)
+        train_acc = eval_acc(clf_model, factual_explainer, train_loader, device, args)
+
+        train_roc = eval_explain(clf_model, factual_explainer, train_loader, device)
+        val_roc = eval_explain(clf_model, factual_explainer, val_loader, device)
+
         print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}, Val_acc: {val_acc},  Train_acc: {train_acc}")
+        print(f'Training ROC-AUC: ')
 
     test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args, v=True)
     print(f"Final Test_acc: {test_acc}")

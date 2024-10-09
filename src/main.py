@@ -2,6 +2,7 @@ import gcn
 from data_preprocessing import *
 from sklearn.metrics import roc_auc_score
 from utils import *
+from test_groundtruth import * 
 
 sys.path.append('../')
 
@@ -47,6 +48,25 @@ def eval_explain(clf_model, expl_model, dataloader, device='cpu'):
             x, edge_index, y_target = inputs
             edge_label = data.edge_label.to(device)
             expl_mask = explain_inference(clf_model, expl_model, inputs)
+
+            assert expl_mask.shape == edge_label.shape
+
+            for idx in range(expl_mask.shape[0]):
+                predictions.append(expl_mask[idx].item())
+                ground_explanations.append(edge_label[idx].item())
+            
+    return roc_auc_score(ground_explanations, predictions)
+
+def eval_explain_gt(clf_model, expl_model, dataloader, device='cpu'):
+    expl_model.eval()
+    predictions = []
+    ground_explanations = []
+    for data in dataloader:  # Iterate in batches over the training/test dataset.
+        with torch.no_grad():
+            inputs = data.x.to(device), data.edge_index.to(device), data.y.to(device)
+            x, edge_index, y_target = inputs
+            edge_label = data.edge_label.to(device)
+            expl_mask = edge_label
 
             assert expl_mask.shape == edge_label.shape
 
@@ -115,8 +135,12 @@ def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, t
         print()
 
     test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args, v=False)
-    test_roc = eval_explain(clf_model, factual_explainer, val_loader, device)
+    test_roc = eval_explain(clf_model, factual_explainer, test_loader, device)
     print(f"Final Test_acc: {test_acc}, Test_roc: {test_roc}")
+
+    test_acc_gt = eval_acc_gt(clf_model, factual_explainer, test_loader, device, args, v=False)
+    test_roc_gt = eval_explain_gt(clf_model, factual_explainer, test_loader, device)
+    print(f"Final Test_acc_gt: {test_acc_gt}, Test_roc_gt: {test_roc_gt}")
 
 def run(args):
     device = "cpu"
@@ -149,7 +173,6 @@ def run(args):
     expl_embedding = args.h_dim * 2
     factual_explainer = FactualExplainer(expl_embedding, device)
     optimizer_f = Adam(factual_explainer.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-
 
     train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args)
     

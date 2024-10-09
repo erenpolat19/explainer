@@ -51,9 +51,6 @@ def loss_f(pred, target, mask, reg_coefs):
     return cce_loss + size_loss + mask_ent_loss    
 
 def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_loader, device, args, temp=(5.0, 2.0)):
-    reg_coefs = ( 1e-3, args.reg_coefs[1])
-    k = 10
-
     temp_schedule = lambda e: temp[0] * ((temp[1] / temp[0]) ** (e / args.epochs))
     for epoch in range(args.epochs):
         cf_explainer.train()
@@ -71,20 +68,7 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
             loss.backward()
             optimizer_cf.step()
 
-            total_loss_f += loss.item()
-
-        val_acc = eval_acc(clf_model, factual_explainer, val_loader, device, args, k=k)
-        #train_acc = eval_acc(clf_model, factual_explainer, train_loader, device, args)
-
-        train_roc = eval_explain(clf_model, factual_explainer, train_loader, device, k=k)
-        val_roc = eval_explain(clf_model, factual_explainer, val_loader, device, k=k)
-
-        print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}, Val_acc: {val_acc}, Training ROC: {train_roc}, Val ROC: {val_roc}")
-        #print()
-
-    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args, v=True, k=k)
-    test_roc = eval_explain(clf_model, factual_explainer, val_loader, device, k=k)
-    print(f"Final Test_acc: {test_acc}, Test_roc: {test_roc}")
+            total_loss_f += loss.item(
 
 def run(args):
     device = "cpu"

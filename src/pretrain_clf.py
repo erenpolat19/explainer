@@ -48,7 +48,7 @@ if __name__ == '__main__':
     num_node_features = data[0].x.shape[1]
     #print(data[1])
 
-    model = GCN(num_node_features,2).to(device)
+    model = GCN(num_node_features,2, 'max').to(device)
     model.reset_parameters()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     best_val_acc = 0
     best_model = None
     best_epoch = 0
-    for epoch in range(1, 2000):
+    for epoch in range(1, 1000):
         train_loss = train(model, criterion, optimizer, train_loader, device)
         train_acc = test(train_loader, model, device)
         val_acc = test(val_loader, model, device)
@@ -69,4 +69,4 @@ if __name__ == '__main__':
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), 'clf-bad.pth')
+    torch.save(model.state_dict(), 'clf-bad-maxnpool.pth')

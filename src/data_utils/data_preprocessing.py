@@ -51,7 +51,11 @@ def preprocess_ba_2motifs(dataset_name):
                  y=torch.tensor(labels[i], dtype=torch.float).argmax(), edge_label = torch.tensor(edge_label, dtype=torch.long))
         graphs.append(graph)
     return graphs
-    
+
+def preprocess_generated_ba2():
+    with open(f'../dataset/BA-2motif/ba2-generated.pkl', 'rb') as fin:
+        data = pkl.load(fin)
+    return data
 
 
 """

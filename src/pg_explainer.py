@@ -4,7 +4,7 @@ import sys
 import argparse
 from data_utils.data_preprocessing import *
 from sklearn.metrics import roc_auc_score
-from torch_geometric.explain import Explainer, ModelConfig
+from torch_geometric.explain import Explainer, ModelConfig, ThresholdConfig
 from utils import *
 
 
@@ -33,8 +33,11 @@ np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 
 def eval_acc_pg(explainer, dataloader, clf_model, device='cpu'):
+    correct = 0
+    clf_model.eval()
     for data in dataloader:  # Iterate in batches over the training/test dataset.
         with torch.no_grad():
+
             x, edge_index, y_target, edge_label = data.x.to(device), data.edge_index.to(device), data.y.to(device), data.edge_label.to(device)
             expl_mask = explainer(x, edge_index, target=y_target).edge_mask
             masked_pred = clf_model(x, edge_index, edge_weights = expl_mask, batch=data.batch)   # Graph-level prediction
@@ -64,14 +67,10 @@ def train(clf_model, explainer, train_loader, val_loader, test_loader, device, a
             x, edge_index, y_target = data.x.to(device), data.edge_index.to(device), data.y.to(device)
             loss = explainer.algorithm.train(epoch, clf_model, x, edge_index,
                                             target=y_target)
-       
-        #train_acc = eval_acc(clf_model, factual_explainer, train_loader, device, args)
-
-        # train_roc = eval_explain(clf_model, explainer, train_loader, device)
-        # val_roc = eval_explain(clf_model, explainer, val_loader, device)
 
         print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}")
-    print( eval_exp_pg(explainer, test_loader, device))
+    print( 'Test ROC AUC', eval_exp_pg(explainer, test_loader, device))
+    print( 'Test acc', eval_acc_pg(explainer, test_loader, clf_model, device))
 
 def explain_and_save(explainer, data, device):
     res = []
@@ -92,7 +91,8 @@ def run(args):
     """
     load data for train, val, test
     """
-    dataset_name = args.dataset
+    #dataset_name = args.dataset
+    dataset_name = 'BA-2motif-this-one-works'
     data = preprocess_ba_2motifs(dataset_name)
     for i, graph in enumerate(data):
         if graph.y.item() == 1:
@@ -107,19 +107,19 @@ def run(args):
     params['num_classes'] = 2
 
     # classifier
-    clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load best model
-    checkpoint = torch.load('clf.pth')
+    clf_model = GCN(params['x_dim'], params['num_classes'], 'max').to(device)              # load best model
+    checkpoint = torch.load('clf-good.pth')
     clf_model.load_state_dict(checkpoint)
     clf_model.eval()                                                              
 
     # Factual Explainer MLP
     explainer = Explainer(
         model= clf_model,
-        algorithm=PGExplainer(epochs=30, lr=0.003),
+        algorithm=PGExplainer(epochs=args.epochs, lr=0.003),
         explanation_type='phenomenon',
         edge_mask_type='object',
-        model_config=ModelConfig(mode='binary_classification', task_level='graph', return_type='raw'),
-        )
+        model_config=ModelConfig(mode='binary_classification', task_level='graph', return_type='raw'))
+    
     train(clf_model, explainer, train_loader, val_loader, test_loader, device, args)
     explain_and_save(explainer, data, device)
     

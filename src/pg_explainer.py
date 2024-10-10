@@ -100,14 +100,14 @@ def run(args):
         else:
             graph.y = torch.tensor([1,0], dtype=torch.float)
 
-    train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=1, val_split=0.1, test_split=0.1)
+    train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=1, val_split=0.1, test_split=0.1)
     params = {}
     # params
     params['x_dim'] = 10
     params['num_classes'] = 2
 
     # classifier
-    clf_model = GCN(params['x_dim'], params['num_classes'], 'max').to(device)              # load best model
+    clf_model = GCN(params['x_dim'], params['num_classes'], 'both').to(device)              # load best model
     checkpoint = torch.load('clf-good.pth')
     clf_model.load_state_dict(checkpoint)
     clf_model.eval()                                                              

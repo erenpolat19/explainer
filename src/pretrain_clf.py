@@ -2,6 +2,10 @@ from model.models import *
 from data_utils.data_preprocessing import *
 import argparse
 
+parser = argparse.ArgumentParser(description='')
+parser.add_argument('--seed', default=1, help='k')
+parser.add_argument
+args = parser.parse_args()
 
 def train(model, criterion, optimizer, train_loader, device):
     model.train()
@@ -36,11 +40,11 @@ def test(loader, model, device):
 
 if __name__ == '__main__':
     device = 'cpu'
-    dataset_name = 'BA-2motif'
-    #dataset_name = 'BA-2motif-this-one-works'
+    #dataset_name = 'BA-2motif'
+    dataset_name = 'BA-2motif-this-one-works'
     data = preprocess_ba_2motifs(dataset_name)
     #data = preprocess_generated_ba2()
-    train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=64, val_split=0.1, test_split=0.1)
+    train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=64, val_split=0.1, test_split=0.1)
 
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--batch_size', type=int, default=500, metavar='N',
@@ -48,7 +52,7 @@ if __name__ == '__main__':
     num_node_features = data[0].x.shape[1]
     #print(data[1])
 
-    model = GCN(num_node_features,2, 'max').to(device)
+    model = GCN(num_node_features,2, 'both').to(device)
     model.reset_parameters()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
@@ -69,4 +73,4 @@ if __name__ == '__main__':
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), 'clf-bad-maxnpool.pth')
+    torch.save(model.state_dict(), 'clf-good-both.pth')

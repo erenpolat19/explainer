@@ -135,7 +135,7 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         
         mu, logvar = self.encode(inputs, y_target)
         z = self.reparameterize(mu, beta * logvar)
-        print('z', z.shape)
+        #print('z', z.shape)
         if batch is None:
             out1, _ = torch.max(z, 0)
             out1 = out1.unsqueeze(0)
@@ -143,7 +143,7 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         else:
             out1 = global_max_pool(z, batch)
             out2 = global_mean_pool(z, batch)
-        print('out1', out1.shape)
+        #print('out1', out1.shape)
         
         reduce_z = torch.cat([out1, out2], dim=-1)
         reduce_z = torch.cat([reduce_z, y_target.unsqueeze(-1)], dim=-1)

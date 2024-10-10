@@ -48,7 +48,7 @@ def loss(reconstr_a, orig_a, orig_x, y_pred, y_cf, z_mu, z_logvar, alpha):
     kl_loss = -0.5 * torch.sum(1 + z_logvar - z_mu.pow(2) - z_logvar.exp())
 
     #cf loss
-    cf_loss = F.binary_cross_entropy(y_pred, y_cf)
+    cf_loss = F.cross_entropy(y_pred, y_cf)
 
     return reconst_loss + kl_loss + alpha * cf_loss, reconst_loss, kl_loss, cf_loss
 
@@ -56,9 +56,9 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     num_nodes = params['num_nodes']
 
     x, edge_index, edge_weights = inputs #x : batchsize x 25, 10   edge_index: 2x Einbatch
-    print('x', x.shape, 'edge_index' , edge_index.shape)
+    #('x', x.shape, 'edge_index' , edge_index.shape)
     reconstr_mask, z_mu, z_logvar = cf_explainer(inputs, beta=beta, y_target=y_cf, batch=data.batch)
-
+    # batchsize, 25*25
     batch_size = reconstr_mask.shape[0]
     orig_a = to_dense_adj(edge_index, data.batch, max_num_nodes=num_nodes)
     reconstr_adjs = []
@@ -96,10 +96,10 @@ def test(cf_explainer, clf_model, loader, params, device):
             y_cf = 1 - y_target
             reconstr_a, orig_a, y_pred, z_mu, z_logvar = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
             # Using the masked graph's edge weights
-            y_pred = y_pred.argmax(dim=1)
+            y_pred_hard = y_pred.argmax(dim=1)
 
-            correct += int((y_pred == y_cf).sum())
-            loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, y_pred, y_cf, z_mu, z_logvar, alpha=1)
+            correct += int((y_pred_hard == y_cf).sum())
+            loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, x, y_pred, y_cf, z_mu, z_logvar, alpha=1)
 
     return correct / len(loader.dataset), loss_reconstr, loss_kl, loss_cf 
 
@@ -137,7 +137,7 @@ def run(args):
     #dataset_name = args.dataset
     dataset_name = 'BA-2motif-this-one-works'
     data = preprocess_ba_2motifs(dataset_name)
-    train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=64, val_split=0.1, test_split=0.1)
+    train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=64, val_split=0.1, test_split=0.1)
 
     # x_dim = 10
     # h_dim = 20
@@ -150,7 +150,7 @@ def run(args):
 
     # embedder
     clf_model = GCN(params['x_dim'], params['num_classes'], pooling='both').to(device)              # load clf
-    checkpoint = torch.load('clf-good.pth')
+    checkpoint = torch.load('clf-good-both.pth')
     clf_model.load_state_dict(checkpoint)
     clf_model.eval()                                                              
 

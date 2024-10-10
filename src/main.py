@@ -33,7 +33,6 @@ args = parser.parse_args()
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 
-
 def loss_f(pred, target, mask, reg_coefs):
     
     scale = 0.99
@@ -101,10 +100,10 @@ def run(args):
     """
     load data for train, val, test
     """
-    dataset_name = args.dataset
-    #dataset_name = 'BA-2motif-this-one-works'
+    #dataset_name = args.dataset
+    dataset_name = 'BA-2motif-this-one-works'
     data = preprocess_ba_2motifs(dataset_name)
-    train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=args.batch_size, val_split=0.1, test_split=0.1)
+    train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=args.batch_size, val_split=0.1, test_split=0.1)
 
     """
     All we are doing now is: Batched graphs --> GCN to get this pretrained classifier's node embeddings
@@ -119,7 +118,7 @@ def run(args):
     clf_model = GCN(params['x_dim'], params['num_classes'], 'both').to(device)              # load best model
     
     # Load the saved state dictionary
-    checkpoint = torch.load('clf-bad.pth')
+    checkpoint = torch.load('clf-good-both.pth')
 
     # Load the weights into the model
     clf_model.load_state_dict(checkpoint)
@@ -133,11 +132,6 @@ def run(args):
     train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args)
     
 run(args)
-
-
-
-
-
 
 '''1. dataloader for mutag
         2. pretrain the graph classifier

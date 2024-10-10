@@ -116,12 +116,11 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
             optimizer_cf.zero_grad()
 
             #mask (or edge weight) is none atm
-            reconstr_a, reconstr_edge_index, orig_a, y_pred, z_mu, z_logvar = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
+            reconstr_a, orig_a, y_pred, z_mu, z_logvar = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
             alpha = 1
             if epoch < args.vae_cf_epoch: #check this later
                 alpha = 0
-
-            loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, y_pred, y_cf, z_mu, z_logvar, alpha)
+            loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, x, y_pred, y_cf, z_mu, z_logvar, alpha)
             loss_total.backward()
             optimizer_cf.step()
 

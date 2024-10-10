@@ -92,9 +92,9 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         hidden_dim = 512
         
         self.decoder = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim * 2),
+            nn.Linear(hidden_dim * 2 + 1, hidden_dim * 2 + 1),
             nn.ReLU(),
-            nn.Linear(hidden_dim * 2, output_size)
+            nn.Linear(hidden_dim * 2 + 1, output_size)
         )
 
         self.fc_mu = nn.Linear(256, hidden_dim)
@@ -120,9 +120,6 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         mu = self.fc_mu(input_lin)
         logvar = self.fc_logvar(input_lin)
 
-        mu = torch.cat((mu, y_target), dim=1)
-        logvar = torch.cat((logvar, y_target), dim=1)
-
         return mu, logvar
 
     def reparameterize(self, mu, logvar):
@@ -138,7 +135,7 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         
         mu, logvar = self.encode(inputs, y_target)
         z = self.reparameterize(mu, beta * logvar)
-        
+        print('z', z.shape)
         if batch is None:
             out1, _ = torch.max(z, 0)
             out1 = out1.unsqueeze(0)
@@ -146,8 +143,10 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         else:
             out1 = global_max_pool(z, batch)
             out2 = global_mean_pool(z, batch)
-
+        print('out1', out1.shape)
+        
         reduce_z = torch.cat([out1, out2], dim=-1)
+        reduce_z = torch.cat([reduce_z, y_target.unsqueeze(-1)], dim=-1)
         recon_x = self.decode(reduce_z)
 
         return recon_x, mu, logvar

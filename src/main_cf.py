@@ -58,7 +58,8 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     x, edge_index, edge_weights = inputs #x : batchsize x 25, 10   edge_index: 2x Einbatch
     #('x', x.shape, 'edge_index' , edge_index.shape)
     reconstr_mask, z_mu, z_logvar = cf_explainer(inputs, beta=beta, y_target=y_cf, batch=data.batch)
-    # batchsize, 25*25
+    # reconstr mask: batchsize, 25*25
+    # x: batchsize*25  batchsize, 25
     batch_size = reconstr_mask.shape[0]
     orig_a = to_dense_adj(edge_index, data.batch, max_num_nodes=num_nodes)
     reconstr_adjs = []

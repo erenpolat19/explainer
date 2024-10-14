@@ -62,13 +62,16 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     # x: batchsize*25  batchsize, 25
     batch_size = reconstr_mask.shape[0]
     orig_a = to_dense_adj(edge_index, data.batch, max_num_nodes=num_nodes)
-    reconstr_adjs = []
 
+    reconstr_adjs = []
+    orig_adjs = []
     offset_new = 0
     aug_edge_list = []
     aug_edge_weights = []
     for i in range(batch_size):
         adj_matrix = reconstr_mask[i].reshape(num_nodes, num_nodes)
+        orig_adjs.append(orig_a[i,:, :])
+
         reconstr_adjs.append(adj_matrix)
         edge_list = torch.nonzero(adj_matrix)
         edge_weights = adj_matrix[edge_list[:, 0], edge_list[:, 1]]
@@ -85,17 +88,23 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
 
     y_pred = clf_model(x, aug_edge_list, edge_weights=aug_edge_weights, batch=new_batch_tensor)
 
-    return reconstr_a, orig_a, y_pred, z_mu, z_logvar
+    assert(len(reconstr_adjs) == len(orig_adjs))
+    all_cfs = list(zip(reconstr_a, orig_adjs))
 
-def test(cf_explainer, clf_model, loader, params, device):
+    return reconstr_a, orig_a, y_pred, z_mu, z_logvar, all_cfs
+
+def test(cf_explainer, clf_model, loader, params, device ,save=False):
     cf_explainer.eval()
     total_loss_cf = 0
     correct = 0
+    all_counterfactuals = []
     for data in loader:  # Iterate in batches over the training/test dataset.
         with torch.no_grad():
             x, edge_index, y_target  = data.x.to(device), data.edge_index.to(device), data.y.to(device)
             y_cf = 1 - y_target
-            reconstr_a, orig_a, y_pred, z_mu, z_logvar = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
+            reconstr_a, orig_a, y_pred, z_mu, z_logvar, all_batch_cfs = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
+            if save:
+                all_counterfactuals += all_batch_cfs
             # Using the masked graph's edge weights
             y_pred_hard = y_pred.argmax(dim=1)
 
@@ -103,6 +112,9 @@ def test(cf_explainer, clf_model, loader, params, device):
             loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, x, y_pred, y_cf, z_mu, z_logvar, alpha=1)
 
             adj_reconst_binary = torch.bernoulli(reconstr_a)
+    if save:
+        with open('generated_cfs.pkl', 'wb') as f:
+            pkl.dump(all_counterfactuals, f)
 
     return correct / len(loader.dataset), loss_reconstr, loss_kl, loss_cf 
 
@@ -119,7 +131,7 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
             optimizer_cf.zero_grad()
 
             #mask (or edge weight) is none atm
-            reconstr_a, orig_a, y_pred, z_mu, z_logvar = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
+            reconstr_a, orig_a, y_pred, z_mu, z_logvar, tmp = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
             alpha = 1
             if epoch < args.vae_cf_epoch: #check this later
                 alpha = 0
@@ -129,9 +141,13 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
 
             total_loss_cf += loss_total.item()
 
-        cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, test_loader, params, device)
+        cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, val_loader, params, device)
         print(f"Epoch {epoch + 1}/{args.epochs}, Loss: {loss_total.item()}, 'CF Acc': {cf_acc}, 'Recons loss: {test_reconstr}")
-    visualize_cfs(orig_a[0], reconstr_a[0])
+    visualize_cfs(orig_a[0], torch.bernoulli(reconstr_a[0]))
+
+    cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, test_loader, params, device, save=True)
+    print(f"Final Test: Loss: {loss_total.item()}, 'CF Acc': {cf_acc}, 'Recons loss: {test_reconstr}")
+
 
 def run(args):
     device = "cpu"

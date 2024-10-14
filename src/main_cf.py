@@ -77,7 +77,7 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
         aug_edge_list.append(edge_list.T)
         aug_edge_weights.append(edge_weights)
         offset_new += num_nodes
-                
+
     aug_edge_list = torch.concat(aug_edge_list,-1).to(device) 
     aug_edge_weights = torch.concat(aug_edge_weights,-1).to(device)
     new_batch_tensor= torch.arange(batch_size).repeat_interleave(num_nodes)
@@ -101,6 +101,8 @@ def test(cf_explainer, clf_model, loader, params, device):
 
             correct += int((y_pred_hard == y_cf).sum())
             loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, x, y_pred, y_cf, z_mu, z_logvar, alpha=1)
+
+            adj_reconst_binary = torch.bernoulli(reconstr_a)
 
     return correct / len(loader.dataset), loss_reconstr, loss_kl, loss_cf 
 
@@ -129,6 +131,7 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
 
         cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, test_loader, params, device)
         print(f"Epoch {epoch + 1}/{args.epochs}, Loss: {loss_total.item()}, 'CF Acc': {cf_acc}, 'Recons loss: {test_reconstr}")
+    visualize_cfs(orig_a[0], reconstr_a[0])
 
 def run(args):
     device = "cpu"

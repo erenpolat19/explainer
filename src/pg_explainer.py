@@ -108,7 +108,7 @@ def run(args):
 
     # classifier
     clf_model = GCN(params['x_dim'], params['num_classes'], 'both').to(device)              # load best model
-    checkpoint = torch.load('clf-good.pth')
+    checkpoint = torch.load('pretrained/clf-good.pth')
     clf_model.load_state_dict(checkpoint)
     clf_model.eval()                                                              
 

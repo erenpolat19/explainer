@@ -73,4 +73,4 @@ if __name__ == '__main__':
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), 'clf-good-both.pth')
+    torch.save(model.state_dict(), 'pretrained/clf-good-both.pth')

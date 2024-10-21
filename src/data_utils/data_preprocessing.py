@@ -36,16 +36,15 @@ Returns:
         - features (list of numpy.ndarray): A list of feature matrices corresponding to each graph.
         - labels (list of numpy.ndarray): A list of labels associated with each graph.
 """
-def load_ba_2motifs(dataset_name):
-    current_working_dir = os.getcwd()
-    dataset_folder = os.path.join(os.path.dirname(current_working_dir), "dataset", "BA-2Motif")
+def load_ba_2motifs(data_dir, dataset_name):
+    dataset_folder = os.path.join(data_dir, "BA-2Motif")
     file_path = os.path.join(dataset_folder, f"{dataset_name}.pkl")
     with open(file_path, 'rb') as fin:
         adjs, features, labels = pkl.load(fin)
     return adjs, features, labels
 
-def preprocess_ba_2motifs(dataset_name):
-    adjs, features, labels = load_ba_2motifs(dataset_name)
+def preprocess_ba_2motifs(data_dir, dataset_name):
+    adjs, features, labels = load_ba_2motifs(data_dir, dataset_name)
     
     edge_indices_all = adj_to_edge_index(adjs)
     graphs = []

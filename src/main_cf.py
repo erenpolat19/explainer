@@ -171,7 +171,6 @@ def run(args):
     params = {'x_dim': 10, 'h_dim': args.h_dim, 'z_dim': args.h_dim, 'num_classes': 2, 
               'num_nodes': num_nodes}
 
-    # embedder
     clf_model = GCN(params['x_dim'], params['num_classes'], pooling='both').to(device)              # load clf
     checkpoint = torch.load('pretrained/clf-good-both.pth')
     clf_model.load_state_dict(checkpoint)

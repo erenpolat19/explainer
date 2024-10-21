@@ -92,15 +92,15 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         hidden_dim = 512
         
         self.decoder = nn.Sequential(
-            nn.Linear(hidden_dim * 2 + 1, hidden_dim * 2 + 1),
+            nn.Linear(hidden_dim  + 1, hidden_dim + 1),
             nn.ReLU(),
-            nn.Linear(hidden_dim * 2 + 1, output_size)
+            nn.Linear(hidden_dim  + 1, output_size)
         )
 
-        self.fc_mu = nn.Linear(256, hidden_dim)
-        self.fc_logvar = nn.Linear(256, hidden_dim)
+        self.fc_mu = nn.Linear(256 * 2 + 1, hidden_dim)
+        self.fc_logvar = nn.Linear(256 * 2+ 1, hidden_dim)
 
-    def encode(self, inputs, y_target):
+    def encode(self, inputs, y_cf, batch):
         x, edge_index, edge_weight = inputs
     
         out1 = self.conv1(x, edge_index, edge_weight=edge_weight)
@@ -115,12 +115,29 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         out3 = torch.nn.functional.normalize(out3, p=2, dim=1)
         out3 = F.relu(out3)
 
-        input_lin = out3
 
-        mu = self.fc_mu(input_lin)
-        logvar = self.fc_logvar(input_lin)
+        #new, conditional encoding
+        z = out3
 
-        return mu, logvar
+        if batch is None:
+            out1, _ = torch.max(z, 0)
+            out1 = out1.unsqueeze(0)
+            out2 = torch.mean(z, 0).unsqueeze(0)
+        else:
+            out1 = global_max_pool(z, batch)
+            out2 = global_mean_pool(z, batch)
+        
+        graph_rep = torch.cat([out1, out2], dim=-1)
+
+        z_mu = self.fc_mu(torch.cat((graph_rep, y_cf.unsqueeze(-1)), dim=1))
+        z_logvar = self.fc_mu(torch.cat((graph_rep, y_cf.unsqueeze(-1)), dim=1))
+        #input_lin = out3
+        
+
+
+        # mu = self.fc_mu(input_lin)
+        # logvar = self.fc_logvar(input_lin)
+        return z_mu, z_logvar
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -131,23 +148,29 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
     def decode(self, z):
         return torch.sigmoid(self.decoder(z))
 
-    def forward(self,inputs,beta, y_target, batch=None):
+    def forward(self,inputs,beta, y_cf, batch=None):
         
-        mu, logvar = self.encode(inputs, y_target)
+        mu, logvar = self.encode(inputs, y_cf, batch)
         z = self.reparameterize(mu, beta * logvar)
         #print('z', z.shape)
-        if batch is None:
-            out1, _ = torch.max(z, 0)
-            out1 = out1.unsqueeze(0)
-            out2 = torch.mean(z, 0).unsqueeze(0)
-        else:
-            out1 = global_max_pool(z, batch)
-            out2 = global_mean_pool(z, batch)
+
+        # if batch is None:
+        #     out1, _ = torch.max(z, 0)
+        #     out1 = out1.unsqueeze(0)
+        #     out2 = torch.mean(z, 0).unsqueeze(0)
+        # else:
+        #     out1 = global_max_pool(z, batch)
+        #     out2 = global_mean_pool(z, batch)
+
         #print('out1', out1.shape)
         
-        reduce_z = torch.cat([out1, out2], dim=-1)
-        reduce_z = torch.cat([reduce_z, y_target.unsqueeze(-1)], dim=-1)
-        recon_x = self.decode(reduce_z)
+        #reduce_z = torch.cat([out1, out2], dim=-1)
+        
+        
+        #reduce_z = torch.cat([reduce_z, y_cf.unsqueeze(-1)], dim=-1)
+        #recon_x = self.decode(reduce_z)
+
+        recon_x = self.decode(torch.cat([z,y_cf.unsqueeze(-1)], dim=-1))
 
         return recon_x, mu, logvar
     

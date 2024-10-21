@@ -41,21 +41,25 @@ def test(loader, model, device):
 
 if __name__ == '__main__':
     device = 'cpu'
-    #dataset_name = 'BA-2motif'
-    # dataset_name = 'BA-2motif-this-one-works'
-    # data = preprocess_ba_2motifs(dataset_name)
+    
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
     data_dir = os.path.join(parent_dir, 'dataset')
 
-    dataset_name = 'mutag'
+    dataset_name = 'BA-2motif'
+    #dataset_name = 'BA-2motif-this-one-works'
+    #dataset_name = 'mutag'
     data = get_dataset(data_dir, dataset_name)
 
 
     train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=64, val_split=0.1, test_split=0.1)
     num_node_features = data[0].x.shape[1]
     #print(data[1])
+
+    early_stopping = 100 if dataset_name == 'mutag' else 500
+    epochs = 5000 
+
 
     model = GCN(num_node_features,2).to(device)
     #model.reset_parameters()
@@ -76,9 +80,9 @@ if __name__ == '__main__':
         #test_acc = test(test_loader, model, data, device)
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}')
         # Early stopping
-        if epoch - best_epoch > 100 and val_acc > 0.98:
+        if epoch - best_epoch > early_stopping and val_acc > 0.98:
             break
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), 'pretrained/clf_mutag.pth')
+    torch.save(model.state_dict(), f'model/pretrained/{dataset_name}/clf_{dataset_name}.pth')

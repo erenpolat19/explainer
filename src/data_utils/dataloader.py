@@ -21,8 +21,8 @@ def get_dataloaders(data_list, args, batch_size=32, val_split=0.2, test_split=0.
 
     num_samples = len(data_list)
     indices = np.arange(num_samples)
-    train_idx, temp_idx = train_test_split(indices, test_size=val_split + test_split, random_state=args.seed)
-    val_idx, test_idx = train_test_split(temp_idx, test_size=test_split / (val_split + test_split), random_state=args.seed)
+    train_idx, temp_idx = train_test_split(indices, test_size=val_split + test_split, random_state=int(args.seed))
+    val_idx, test_idx = train_test_split(temp_idx, test_size=test_split / (val_split + test_split), random_state=int(args.seed))
     
     train_data = [data_list[i] for i in train_idx]
     val_data = [data_list[i] for i in val_idx]

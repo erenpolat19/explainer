@@ -131,7 +131,7 @@ def run(args):
     clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load best model
     
     # Load the saved state dictionary
-    checkpoint = torch.load('pretrained/clf-good-both.pth')
+    checkpoint = torch.load('model/pretrained/clf-good-both.pth')
 
     # Load the weights into the model
     clf_model.load_state_dict(checkpoint)

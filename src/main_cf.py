@@ -57,7 +57,7 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
 
     x, edge_index, edge_weights = inputs #x : batchsize x 25, 10   edge_index: 2x Einbatch
     #('x', x.shape, 'edge_index' , edge_index.shape)
-    reconstr_mask, z_mu, z_logvar = cf_explainer(inputs, beta=beta, y_target=y_cf, batch=data.batch)
+    reconstr_mask, z_mu, z_logvar = cf_explainer(inputs, beta=beta, y_cf=y_cf, batch=data.batch)
     # reconstr mask: batchsize, 25*25
     # x: batchsize*25  batchsize, 25
     batch_size = reconstr_mask.shape[0]
@@ -69,8 +69,6 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     aug_edge_list = []
     aug_edge_weights = []
         
-    
-    adjs = torch.reshape()
 
     for i in range(batch_size):
         adj_matrix = reconstr_mask[i].reshape(num_nodes, num_nodes)
@@ -159,7 +157,12 @@ def run(args):
     """
     #dataset_name = args.dataset
     dataset_name = 'BA-2motif-this-one-works'
-    data = preprocess_ba_2motifs(dataset_name)
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
+    data_dir = os.path.join(parent_dir, 'dataset')
+
+    data = preprocess_ba_2motifs(data_dir, dataset_name)
     train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=64, val_split=0.1, test_split=0.1)
 
     # x_dim = 10
@@ -171,8 +174,8 @@ def run(args):
     params = {'x_dim': 10, 'h_dim': args.h_dim, 'z_dim': args.h_dim, 'num_classes': 2, 
               'num_nodes': num_nodes}
 
-    clf_model = GCN(params['x_dim'], params['num_classes'], pooling='both').to(device)              # load clf
-    checkpoint = torch.load('pretrained/clf-good-both.pth')
+    clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load clf
+    checkpoint = torch.load('model/pretrained/clf-good-both.pth')
     clf_model.load_state_dict(checkpoint)
     clf_model.eval()                                                              
 

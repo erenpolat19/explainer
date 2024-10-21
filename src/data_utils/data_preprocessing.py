@@ -66,7 +66,7 @@ def get_dataset(data_dir, dataset_name):
         data_dir = os.path.join(data_dir, 'Mutagenicity')
         return Mutag(root=data_dir)
     else:
-        return preprocess_ba_2motifs(dataset_name)
+        return preprocess_ba_2motifs(data_dir, dataset_name)
 
 """
 Preprocess the BA-2motifs dataset.

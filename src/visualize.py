@@ -53,6 +53,7 @@ def extract_individual_graphs(batch, expl_mask):
     return graphs, expl_masks_split
 
 
+
 def visualize(graphs, expl_masks_split, top_k):
     for i, graph_data in enumerate(graphs):
         # Create a NetworkX graph
@@ -227,3 +228,21 @@ def visualize_pred_vs_gt(graphs, expl_masks_split, edge_label, top_k=10):
         # Show the subplots
         plt.tight_layout()
         plt.show()
+
+
+def visualize_cfs(original_adj, counterfactual_adj):
+
+    original_graph = nx.from_numpy_array(original_adj.cpu().detach().numpy())
+    counterfactual_graph = nx.from_numpy_array(counterfactual_adj.cpu().detach().numpy())
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    
+    pos = nx.spring_layout(original_graph)
+    nx.draw(original_graph, pos, ax=axes[0], with_labels=False, node_color='lightblue', edge_color='gray', node_size=20)
+    axes[0].set_title('Original Graph')
+
+    nx.draw(counterfactual_graph, pos, ax=axes[1], with_labels=False, node_color='lightgreen', edge_color='gray', node_size=20)
+    axes[1].set_title('Counterfactual Graph')
+
+    plt.tight_layout()
+    plt.show()

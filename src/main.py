@@ -1,21 +1,16 @@
-import gcn
-from data_preprocessing import *
-from sklearn.metrics import roc_auc_score
+from model.models import *
 from utils import *
 from test_groundtruth import * 
 
 sys.path.append('../')
 
 parser = argparse.ArgumentParser(description='')
-parser.add_argument('--batch_size', type=int, default=500, metavar='N',
+parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 500)')
 parser.add_argument('--epochs', type=int, default=2000, metavar='N',
                     help='number of epochs to train (default: 2000)')
 parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
-
-parser.add_argument('--trn_rate', type=float, default=0.6, help='training data ratio')
-parser.add_argument('--tst_rate', type=float, default=0.2, help='test data ratio')
 
 parser.add_argument('--z_dim', type=int, default=20, metavar='N', help='dimension of z') #I AM CHANGING FROM 16 TO 20 FOR DEBUG
 parser.add_argument('--h_dim', type=int, default=20, metavar='N', help='dimension of h') #I AM CHANGING FROM 16 TO 20 FOR DEBUG
@@ -30,52 +25,14 @@ parser.add_argument('--weight_decay', type=float, default=1e-5,
 
 parser.add_argument('--experiment_type', default='train', choices=['train', 'test', 'baseline'],
                     help='train: train CLEAR model; test: load CLEAR from file; baseline: run a baseline')
-parser.add_argument('--reg_coefs', default=(0.05, 1.0), help='reg coefs')
+parser.add_argument('--reg_coefs', default=(1e-3, 1.0), help='reg coefs')
+parser.add_argument('--k', default=10, help='k')
 parser.add_argument
 args = parser.parse_args()
 
 # seed
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
-
-def eval_explain(clf_model, expl_model, dataloader, device='cpu'):
-    expl_model.eval()
-    predictions = []
-    ground_explanations = []
-    for data in dataloader:  # Iterate in batches over the training/test dataset.
-        with torch.no_grad():
-            inputs = data.x.to(device), data.edge_index.to(device), data.y.to(device)
-            x, edge_index, y_target = inputs
-            edge_label = data.edge_label.to(device)
-            expl_mask = explain_inference(clf_model, expl_model, inputs)
-
-            assert expl_mask.shape == edge_label.shape
-
-            for idx in range(expl_mask.shape[0]):
-                predictions.append(expl_mask[idx].item())
-                ground_explanations.append(edge_label[idx].item())
-            
-    return roc_auc_score(ground_explanations, predictions)
-
-def eval_explain_gt(clf_model, expl_model, dataloader, device='cpu'):
-    expl_model.eval()
-    predictions = []
-    ground_explanations = []
-    for data in dataloader:  # Iterate in batches over the training/test dataset.
-        with torch.no_grad():
-            inputs = data.x.to(device), data.edge_index.to(device), data.y.to(device)
-            x, edge_index, y_target = inputs
-            edge_label = data.edge_label.to(device)
-            expl_mask = edge_label
-
-            assert expl_mask.shape == edge_label.shape
-
-            for idx in range(expl_mask.shape[0]):
-                predictions.append(expl_mask[idx].item())
-                ground_explanations.append(edge_label[idx].item())
-            
-    return roc_auc_score(ground_explanations, predictions)
-
 
 def loss_f(pred, target, mask, reg_coefs):
     
@@ -90,6 +47,9 @@ def loss_f(pred, target, mask, reg_coefs):
     return cce_loss + size_loss + mask_ent_loss    
 
 def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args, temp=(5.0, 2.0)):
+    reg_coefs = args.reg_coefs
+    k = args.k
+
     temp_schedule = lambda e: temp[0] * ((temp[1] / temp[0]) ** (e / args.epochs))
     for epoch in range(args.epochs):
         factual_explainer.train()
@@ -109,14 +69,13 @@ def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, t
  
 
             #print(expl_mask.sum(), edge_index[0].shape)
-            masked_pred = clf_model(x, edge_index, expl_mask, batch.batch)  # Graph-level prediction
+            masked_pred = clf_model(x, edge_index, edge_weights=expl_mask, batch=batch.batch)  # Graph-level prediction
 
             optimizer_f.zero_grad()
   
             # Loss for factual explainer
             # loss_f = KL div + clf loss
-            reg_coefs = args.reg_coefs
-            reg_coefs = (1e-3, reg_coefs[1])
+    
             loss = loss_f(masked_pred, y_target, expl_mask, reg_coefs)
 
             loss.backward()
@@ -124,18 +83,17 @@ def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, t
 
             total_loss_f += loss.item()
 
-        val_acc = eval_acc(clf_model, factual_explainer, val_loader, device, args)
-        train_acc = eval_acc(clf_model, factual_explainer, train_loader, device, args)
+        val_acc = eval_acc(clf_model, factual_explainer, val_loader, device, args, k=k)
+        #train_acc = eval_acc(clf_model, factual_explainer, train_loader, device, args, k=k)
 
-        train_roc = eval_explain(clf_model, factual_explainer, train_loader, device)
-        val_roc = eval_explain(clf_model, factual_explainer, val_loader, device)
+        train_roc = eval_explain(clf_model, factual_explainer, train_loader, device, k=k)
+        val_roc = eval_explain(clf_model, factual_explainer, val_loader, device, k=k)
 
-        print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}, Val_acc: {val_acc},  Train_acc: {train_acc}")
-        print(f'Training ROC: {train_roc}, Val ROC: {val_roc}')
-        print()
+        print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}, Val_acc: {val_acc}, Training ROC: {train_roc}, Val ROC: {val_roc}")
+        #print()
 
-    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args, v=False)
-    test_roc = eval_explain(clf_model, factual_explainer, test_loader, device)
+    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args)
+    test_roc = eval_explain(clf_model, factual_explainer, val_loader, device, k=k)
     print(f"Final Test_acc: {test_acc}, Test_roc: {test_roc}")
 
     test_acc_gt = eval_acc_gt(clf_model, factual_explainer, test_loader, device, args, v=False)
@@ -147,23 +105,38 @@ def run(args):
     """
     load data for train, val, test
     """
-    dataset_name = args.dataset
-    data = preprocess_ba_2motifs(dataset_name)
-    train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=64, val_split=0.1, test_split=0.1)
+    #dataset_name = args.dataset
+    dataset_name = 'BA-2motif-this-one-works'
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
+    data_dir = os.path.join(parent_dir, 'dataset')
+
+    # dataset_name = 'mutag'
+    # data = get_dataset(data_dir, dataset_name)
+
+    data = preprocess_ba_2motifs(data_dir, dataset_name)
+    train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=args.batch_size, val_split=0.1, test_split=0.1)
 
     """
     All we are doing now is: Batched graphs --> GCN to get this pretrained classifier's node embeddings
     --> make these into edge embeddings, z_uv (E num edges x 2*h_dim) --> FactualExplainer MLP --> sample & get factual mask (E x 1) 
     """
+
     params = {}
-    # params
-    params['x_dim'] = 10
-    params['num_classes'] = 2
+
+    if dataset_name == 'mutag':
+        params['x_dim'] = 14
+        params['num_classes'] = 2
+    else:
+        params['x_dim'] = 10
+        params['num_classes'] = 2
+    
     # embedder
     clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load best model
     
     # Load the saved state dictionary
-    checkpoint = torch.load('clf.pth')
+    checkpoint = torch.load('model/pretrained/clf-good-both.pth')
 
     # Load the weights into the model
     clf_model.load_state_dict(checkpoint)
@@ -177,11 +150,6 @@ def run(args):
     train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args)
     
 run(args)
-
-
-
-
-
 
 '''1. dataloader for mutag
         2. pretrain the graph classifier

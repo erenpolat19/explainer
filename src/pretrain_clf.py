@@ -1,7 +1,12 @@
-from gcn import *
-from data_preprocessing import *
+from model.models import *
+from data_utils.data_preprocessing import *
 import argparse
+from utils import *
 
+parser = argparse.ArgumentParser(description='')
+parser.add_argument('--seed', default=1, help='k')
+parser.add_argument
+args = parser.parse_args()
 
 def train(model, criterion, optimizer, train_loader, device):
     model.train()
@@ -11,7 +16,7 @@ def train(model, criterion, optimizer, train_loader, device):
         data.to(device)
         #print(data.edge_index.shape)
         out = model(data.x, data.edge_index, edge_weights = None, batch = data.batch)  # Perform a single forward pass.
-        loss = criterion(out, data.y)  # Compute the loss.
+        loss = criterion(out, data.y.long())  # Compute the loss.
         train_loss = train_loss + loss
         loss.backward()  # Derive gradients.
         optimizer.step()  # Update parameters based on gradients.
@@ -36,25 +41,35 @@ def test(loader, model, device):
 
 if __name__ == '__main__':
     device = 'cpu'
-    dataset_name = 'BA-2motif'
-    data = preprocess_ba_2motifs(dataset_name)
-    #data = preprocess_generated_ba2()
-    train_loader, val_loader, test_loader = get_dataloaders(data, batch_size=64, val_split=0.1, test_split=0.1)
+    
 
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--batch_size', type=int, default=500, metavar='N',
-                        help='input batch size for training (default: 500)')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
+    data_dir = os.path.join(parent_dir, 'dataset')
+
+    dataset_name = 'BA-2motif'
+    #dataset_name = 'BA-2motif-this-one-works'
+    #dataset_name = 'mutag'
+    data = get_dataset(data_dir, dataset_name)
+
+
+    train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=64, val_split=0.1, test_split=0.1)
     num_node_features = data[0].x.shape[1]
     #print(data[1])
+
+    early_stopping = 100 if dataset_name == 'mutag' else 500
+    epochs = 5000 
+
+
     model = GCN(num_node_features,2).to(device)
-    model.reset_parameters()
+    #model.reset_parameters()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     criterion = torch.nn.CrossEntropyLoss()
 
     best_val_acc = 0
     best_model = None
     best_epoch = 0
-    for epoch in range(1, 1000):
+    for epoch in range(1, 5000):
         train_loss = train(model, criterion, optimizer, train_loader, device)
         train_acc = test(train_loader, model, device)
         val_acc = test(val_loader, model, device)
@@ -64,7 +79,10 @@ if __name__ == '__main__':
             best_epoch = epoch
         #test_acc = test(test_loader, model, data, device)
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}')
+        # Early stopping
+        if epoch - best_epoch > early_stopping and val_acc > 0.98:
+            break
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), 'clf.pth')
+    torch.save(model.state_dict(), f'model/pretrained/{dataset_name}/clf_{dataset_name}.pth')

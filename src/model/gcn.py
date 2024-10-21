@@ -1,87 +1,53 @@
 import torch
-import torch.nn as nn
 from torch.nn import ReLU, Linear
-import torch.nn.init as init
-from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool
+from torch_geometric.nn import GCNConv, BatchNorm
+from torch_geometric.nn import global_mean_pool, global_max_pool
 
 class GCN(torch.nn.Module):
     """
-    A graph clasification model for graphs decribed in https://arxiv.org/abs/1903.03894.
+    A graph clasification model for graphs decribed in https://arxiv.org/abs/2011.04573.
     This model consists of 3 stacked GCN layers followed by a linear layer.
     In between the GCN outputs and linear layers are pooling operations in both mean and max.
     """
-    def __init__(self, num_features, num_classes, pooling):
+    def __init__(self, num_features, num_classes):
         super(GCN, self).__init__()
-        self.h_dim = 20
-        self.conv1 = GCNConv(num_features, self.h_dim)
+        self.embedding_size = 20
+        self.conv1 = GCNConv(num_features, 20)
         self.relu1 = ReLU()
-        self.conv2 = GCNConv(self.h_dim, self.h_dim)
+        self.conv2 = GCNConv(20, 20)
         self.relu2 = ReLU()
-        self.conv3 = GCNConv(self.h_dim, self.h_dim)
+        self.conv3 = GCNConv(20, 20)
         self.relu3 = ReLU()
-        if pooling == "both":
-            self.lin = Linear(self.h_dim * 2, num_classes)
-        elif pooling == 'max':
-            self.lin = Linear(self.h_dim, num_classes)
-        self.pooling = pooling
+        self.lin = Linear(self.embedding_size * 2, num_classes)
 
-    def forward(self, x, edge_index, edge_weights=None, batch=None):
-        if batch is None:
+    def forward(self, x, edge_index, batch=None, edge_weights=None):
+        if batch is None: # No batch given
             batch = torch.zeros(x.size(0), dtype=torch.long)
-            
         embed = self.embedding(x, edge_index, edge_weights)
 
-        if self.pooling == 'both':
-            out1 = global_max_pool(embed, batch)
+        out1 = global_max_pool(embed, batch)
+        out2 = global_mean_pool(embed, batch)
+        input_lin = torch.cat([out1, out2], dim=-1)
 
-            out2 = global_mean_pool(embed, batch)
-
-            input_lin = torch.cat([out1, out2], dim=-1)
-            out = self.lin(input_lin)
-            
-        elif self.pooling == 'max':
-            input_lin = global_max_pool(embed, batch)
-            out = self.lin(input_lin)
-
+        out = self.lin(input_lin)
         return out
-    
-    def reset_parameters(self):
-        # Initialize weights using Xavier initialization
-        for layer in self.children():
-            if isinstance(layer, GCNConv):
-                # Xavier initialization for GCNConv weights
-                for param in layer.parameters():
-                    if param.dim() == 1:  # Bias
-                        init.zeros_(param)
-                    elif param.dim() == 2:  # Weight
-                        init.xavier_uniform_(param)
-
 
     def embedding(self, x, edge_index, edge_weights=None):
         if edge_weights is None:
             edge_weights = torch.ones(edge_index.size(1))
-            #edge_weights = torch.ones(edge_index.size(1)).cuda()
 
-        stack = []
-        x = x.float()
-        out1 = self.conv1(x, edge_index, edge_weights)              # conv1: Input dim = num_features, Output dim = 20
-
-        out1 = torch.nn.functional.normalize(out1, p=2, dim=1)
+        out1 = self.conv1(x, edge_index, edge_weights)
+        out1 = torch.nn.functional.normalize(out1, p=2, dim=1)  # this is not used in PGExplainer
         out1 = self.relu1(out1)
-        stack.append(out1)                                         
 
-        out2 = self.conv2(out1, edge_index, edge_weights)           # conv2: Input dim = 20, Output dim = 20
-        out2 = torch.nn.functional.normalize(out2, p=2, dim=1)
+        out2 = self.conv2(out1, edge_index, edge_weights)
+        out2 = torch.nn.functional.normalize(out2, p=2, dim=1)  # this is not used in PGExplainer
         out2 = self.relu2(out2)
-        stack.append(out2)
 
-        out3 = self.conv3(out2, edge_index, edge_weights)           # conv3: Input dim = 20, Output dim = 20
-        out3 = torch.nn.functional.normalize(out3, p=2, dim=1)
+        out3 = self.conv3(out2, edge_index, edge_weights)
+        out3 = torch.nn.functional.normalize(out3, p=2, dim=1)  # this is not used in PGExplainer
         out3 = self.relu3(out3)
 
-        input_lin = out3                                           # lin: Input dim = 20, Output dim = num_classes
+        input_lin = out3
 
-        return input_lin #num_nodes * h_dim
-
-
-
+        return input_lin

@@ -101,8 +101,16 @@ def run(args):
     load data for train, val, test
     """
     #dataset_name = args.dataset
-    dataset_name = 'BA-2motif-this-one-works'
-    data = preprocess_ba_2motifs(dataset_name)
+    #dataset_name = 'BA-2motif-this-one-works'
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
+    data_dir = os.path.join(parent_dir, 'dataset')
+
+    dataset_name = 'mutag'
+    data = get_dataset(data_dir, dataset_name)
+
+    #data = preprocess_ba_2motifs(dataset_name)
     train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=args.batch_size, val_split=0.1, test_split=0.1)
 
     """
@@ -111,11 +119,16 @@ def run(args):
     """
 
     params = {}
-    params['x_dim'] = 10
-    params['num_classes'] = 2
+
+    if dataset_name == 'mutag':
+        params['x_dim'] = 14
+        params['num_classes'] = 2
+    else:
+        params['x_dim'] = 10
+        params['num_classes'] = 2
     
     # embedder
-    clf_model = GCN(params['x_dim'], params['num_classes'], 'both').to(device)              # load best model
+    clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load best model
     
     # Load the saved state dictionary
     checkpoint = torch.load('pretrained/clf-good-both.pth')

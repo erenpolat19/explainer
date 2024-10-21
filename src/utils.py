@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from torch.optim import Adam
 from data_utils.data_preprocessing import *
+from data_utils.dataloader import *
 from visualize import *
 
 from sklearn.metrics import roc_auc_score

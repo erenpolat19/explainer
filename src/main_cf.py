@@ -68,10 +68,13 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     offset_new = 0
     aug_edge_list = []
     aug_edge_weights = []
+        
+    
+    adjs = torch.reshape()
+
     for i in range(batch_size):
         adj_matrix = reconstr_mask[i].reshape(num_nodes, num_nodes)
         orig_adjs.append(orig_a[i,:, :])
-
         reconstr_adjs.append(adj_matrix)
         edge_list = torch.nonzero(adj_matrix)
         edge_weights = adj_matrix[edge_list[:, 0], edge_list[:, 1]]
@@ -89,7 +92,7 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     y_pred = clf_model(x, aug_edge_list, edge_weights=aug_edge_weights, batch=new_batch_tensor)
 
     assert(len(reconstr_adjs) == len(orig_adjs))
-    all_cfs = list(zip(reconstr_a, orig_adjs))
+    all_cfs = list(zip(reconstr_adjs, orig_adjs))
 
     return reconstr_a, orig_a, y_pred, z_mu, z_logvar, all_cfs
 

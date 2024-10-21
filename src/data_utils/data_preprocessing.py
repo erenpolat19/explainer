@@ -6,7 +6,9 @@ from torch_geometric.utils import to_scipy_sparse_matrix, from_scipy_sparse_matr
 from torch_geometric.data import Data
 import scipy.sparse as sp
 from torch_geometric.utils import dense_to_sparse
-from data_utils.dataloader import get_dataloaders
+from data_utils.mutag import *
+
+import os
 
 def adj_to_edge_index(adj):
     """
@@ -35,7 +37,10 @@ Returns:
         - labels (list of numpy.ndarray): A list of labels associated with each graph.
 """
 def load_ba_2motifs(dataset_name):
-    with open(f'../dataset/BA-2motif/{dataset_name}.pkl', 'rb') as fin:
+    current_working_dir = os.getcwd()
+    dataset_folder = os.path.join(os.path.dirname(current_working_dir), "dataset", "BA-2Motif")
+    file_path = os.path.join(dataset_folder, f"{dataset_name}.pkl")
+    with open(file_path, 'rb') as fin:
         adjs, features, labels = pkl.load(fin)
     return adjs, features, labels
 
@@ -57,6 +62,12 @@ def preprocess_generated_ba2():
         data = pkl.load(fin)
     return data
 
+def get_dataset(data_dir, dataset_name):
+    if dataset_name == 'mutag':
+        data_dir = os.path.join(data_dir, 'Mutagenicity')
+        return Mutag(root=data_dir)
+    else:
+        return preprocess_ba_2motifs(dataset_name)
 
 """
 Preprocess the BA-2motifs dataset.

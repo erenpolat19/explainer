@@ -82,6 +82,73 @@ class Explainer(nn.Module):
 
         recons_a, recons_x = self.decode(z_sample)
 
+class VGAE(nn.Module):
+    def __init__(self, feature_size, output_size):
+        super(VGAE, self).__init__()
+        self.conv1 = GCNConv(feature_size, 1024) 
+        self.conv2 = GCNConv(1024, 512)
+        self.conv3 = GCNConv(512, 256) 
+        hid_dim = 1024 
+        
+        self.decoder = nn.Sequential(
+            nn.Linear(hid_dim*2,hid_dim*2),
+            nn.ReLU(),
+            nn.Linear(hid_dim*2,output_size))
+
+        self.fc_mu = nn.Linear(256, hid_dim) 
+        self.fc_logvar = nn.Linear(256, hid_dim) 
+    
+    def encode(self, inputs):
+        x, edge_index, edge_weight = inputs
+    
+        out1 = self.conv1(x, edge_index, edge_weight=edge_weight)
+        out1 = torch.nn.functional.normalize(out1, p=2, dim=1)
+        out1 = F.relu(out1)
+
+        out2 = self.conv2(out1, edge_index, edge_weight=edge_weight)
+        out2 = torch.nn.functional.normalize(out2, p=2, dim=1)
+        out2 = F.relu(out2)
+
+        out3 = self.conv3(out2, edge_index, edge_weight=edge_weight)
+        out3 = torch.nn.functional.normalize(out3, p=2, dim=1)
+        out3 = F.relu(out3)
+        
+        input_lin = out3
+
+        mu = self.fc_mu(input_lin)
+        logvar = self.fc_logvar(input_lin)
+        
+        
+        return mu, logvar
+    
+    def reparameterize(self, mu, logvar):
+        std = logvar.mul(0.5).exp_()
+        scale = 1e-2 
+        eps = torch.randn_like(std) * scale 
+        return eps.mul(std).add_(mu)
+
+    def decode(self, inputs):
+        return F.sigmoid(self.decoder(inputs))
+    
+    def forward(self,inputs,beta, batch=None):
+
+        mu, logvar = self.encode(inputs)
+        embed = self.reparameterize(mu, beta * logvar)
+
+        if batch is None:
+            out1,_ = torch.max(embed,0)
+            out1 = torch.unsqueeze(out1,0)
+            out2 = torch.unsqueeze(torch.mean(embed,0),0)
+        else:
+            out1 = global_max_pool(embed, batch)
+            out2 = global_mean_pool(embed, batch)
+
+        reduce_z = torch.cat([out1, out2], dim=-1)
+        recon_x = self.decode(reduce_z) 
+
+        return recon_x, mu, logvar
+    
+    
 class GNN_MLP_VariationalAutoEncoder(nn.Module):
 
     def __init__(self, feature_size, output_size):
@@ -132,8 +199,6 @@ class GNN_MLP_VariationalAutoEncoder(nn.Module):
         z_mu = self.fc_mu(torch.cat((graph_rep, y_cf.unsqueeze(-1)), dim=1))
         z_logvar = self.fc_mu(torch.cat((graph_rep, y_cf.unsqueeze(-1)), dim=1))
         #input_lin = out3
-        
-
 
         # mu = self.fc_mu(input_lin)
         # logvar = self.fc_logvar(input_lin)

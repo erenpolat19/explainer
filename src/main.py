@@ -1,5 +1,7 @@
 from model.models import *
 from utils import *
+from evaluation.ood_eval import eval_graph_list
+from torch_geometric.utils import to_dense_adj
 
 sys.path.append('../')
 
@@ -33,6 +35,28 @@ args = parser.parse_args()
 np.random.seed(args.seed)
 torch.manual_seed(args.seed)
 
+def evaluation(clf_model, factual_explainer, test_loader, params):
+    graphs = []
+    preds = []
+    for data in test_loader:
+        x, edge_index, y_target = data.x, data.edge_index, data.y
+        inputs = x, edge_index, y_target
+        adj = np.asarray(to_dense_adj(edge_index, max_num_nodes=params['num_nodes']).squeeze())
+        G_orig = nx.from_numpy_array(adj)
+        
+        fact_mask = explain_inference(clf_model, factual_explainer, inputs, device='cpu', bias = 0.0, k=args.k)
+        fact_mask = fact_mask.astype(bool)
+
+        masked_edge_index = edge_index[:, fact_mask]
+        masked_adj =  np.asarray(to_dense_adj(masked_edge_index, max_num_nodes=params['num_nodes']).squeeze())
+        G_pred = nx.from_numpy_array(masked_adj)
+
+        graphs.append(G_orig)
+        preds.append(G_pred)
+
+
+    eval_graph_list(graphs, preds, methods=None)
+
 def loss_f(pred, target, mask, reg_coefs):
     
     scale = 0.99
@@ -45,7 +69,7 @@ def loss_f(pred, target, mask, reg_coefs):
     
     return cce_loss + size_loss + mask_ent_loss    
 
-def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args, temp=(5.0, 2.0)):
+def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, device, args, temp=(5.0, 2.0)):
     reg_coefs = args.reg_coefs
     k = args.k
 
@@ -61,47 +85,32 @@ def train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, t
                 node_emb = clf_model.embedding(x, edge_index) # num_nodes x h_dim
             
             edge_emb = create_edge_embed(node_emb, edge_index) # E x 2*h_dim
-
             sampling_weights = factual_explainer(edge_emb)
-            
             expl_mask = sample_graph(sampling_weights, t, bias=0.0).squeeze()
- 
-
-            #print(expl_mask.sum(), edge_index[0].shape)
             masked_pred = clf_model(x, edge_index, edge_weights=expl_mask, batch=batch.batch)  # Graph-level prediction
-
             optimizer_f.zero_grad()
-  
-            # Loss for factual explainer
-            # loss_f = KL div + clf loss
-    
             loss = loss_f(masked_pred, y_target, expl_mask, reg_coefs)
 
             loss.backward()
             optimizer_f.step()
-
             total_loss_f += loss.item()
 
         val_acc = eval_acc(clf_model, factual_explainer, val_loader, device, args, k=k)
         #train_acc = eval_acc(clf_model, factual_explainer, train_loader, device, args, k=k)
-
         train_roc = eval_explain(clf_model, factual_explainer, train_loader, device, k=k)
         val_roc = eval_explain(clf_model, factual_explainer, val_loader, device, k=k)
 
         print(f"Epoch {epoch + 1}/{args.epochs}, Factual Loss: {loss}, Val_acc: {val_acc}, Training ROC: {train_roc}, Val ROC: {val_roc}")
         #print()
 
-    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args)
-    test_roc = eval_explain(clf_model, factual_explainer, val_loader, device, k=k)
-    print(f"Final Test_acc: {test_acc}, Test_roc: {test_roc}")
+    return factual_explainer
+
 
 def run(args):
     device = "cpu"
-    """
-    load data for train, val, test
-    """
     #dataset_name = args.dataset
-    dataset_name = 'BA-2motif-this-one-works'
+    #dataset_name = 'BA-2motif-this-one-works'
+    dataset_name = 'ba2'
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
@@ -127,11 +136,12 @@ def run(args):
         params['x_dim'] = 10
         params['num_classes'] = 2
     
+    params['num_nodes'] = data[0].x.shape[0]
     # embedder
     clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load best model
     
     # Load the saved state dictionary
-    checkpoint = torch.load('model/pretrained/clf-good-both.pth')
+    checkpoint = torch.load(f'model/pretrained/clf-good-both.pth')
 
     # Load the weights into the model
     clf_model.load_state_dict(checkpoint)
@@ -142,7 +152,17 @@ def run(args):
     factual_explainer = FactualExplainer(expl_embedding, device)
     optimizer_f = Adam(factual_explainer.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, test_loader, device, args)
+    factual_explainer = train(clf_model, factual_explainer, optimizer_f, train_loader, val_loader, device, args)
+
+    test_acc = eval_acc(clf_model, factual_explainer, test_loader, device, args)
+    test_roc = eval_explain(clf_model, factual_explainer, test_loader, device, k=args.k)
+    print(f"Final Test_acc: {test_acc}, Test_roc: {test_roc}")
+
+    torch.save(factual_explainer, f'model/pretrained/explainers/fexpl_{dataset_name}.pth')
+
+    evaluation(clf_model, factual_explainer, test_loader, params)
+
+    
     
 run(args)
 

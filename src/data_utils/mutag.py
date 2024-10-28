@@ -10,7 +10,7 @@ from torch_geometric.data import InMemoryDataset, Data
 class Mutag(InMemoryDataset):
     def __init__(self, root):
         super().__init__(root=root)
-        self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data, self.slices, self.data_list = torch.load(self.processed_paths[0])
 
     @property
     def raw_file_names(self):
@@ -59,7 +59,7 @@ class Mutag(InMemoryDataset):
             data_list.append(Data(x=x, y=y.item(), edge_index=edge_index, node_label=node_label, edge_label=edge_label, node_type=torch.tensor(node_type_lists[i])))
 
         data, slices = self.collate(data_list)
-        torch.save((data, slices), self.processed_paths[0])
+        torch.save((data, slices, data_list), self.processed_paths[0])
 
     def get_graph_data(self):
         pri = self.raw_dir + '/Mutagenicity_'

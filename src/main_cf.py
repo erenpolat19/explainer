@@ -13,7 +13,7 @@ parser.add_argument('--epochs', type=int, default=2000, metavar='N',
 parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 
-parser.add_argument('--vae_cf_epoch', type=int, default=50, metavar='N',
+parser.add_argument('--vae_cf_epoch', type=int, default=20, metavar='N',
                     help='epochs to train without cf loss')
 
 parser.add_argument('--trn_rate', type=float, default=0.6, help='training data ratio')
@@ -25,7 +25,7 @@ parser.add_argument('--dropout', type=float, default=0.1)
 
 parser.add_argument('--dataset', default='BA-2motif', help='dataset to use',
                     choices=['community', 'ogbg_molhiv', 'imdb_m'])
-parser.add_argument('--lr', type=float, default=1e-3, #changed to 3e-3
+parser.add_argument('--lr', type=float, default=3e-3, #changed to 3e-3
                     help='learning rate for optimizer')
 parser.add_argument('--weight_decay', type=float, default=1e-5,
                     help='weight decay')
@@ -44,20 +44,40 @@ def loss(reconstr_a, orig_a, orig_x, y_pred, y_cf, z_mu, z_logvar, alpha):
     #reconstr loss
     reconst_loss = F.binary_cross_entropy(reconstr_a, orig_a)
 
+    size_loss = torch.sum(reconstr_a) * 0.0001
+
     #kl loss, maybe add the learned prior later etc.
     kl_loss = -0.5 * torch.sum(1 + z_logvar - z_mu.pow(2) - z_logvar.exp())
+    
+    # mask_ent_reg = -reconstr_a * torch.log(reconstr_a) - (1 - reconstr_a) * torch.log(1 - reconstr_a)
+    # mask_ent_loss = 1 * torch.mean(mask_ent_reg)
 
     #cf loss
     cf_loss = F.cross_entropy(y_pred, y_cf)
 
-    return reconst_loss + kl_loss + alpha * cf_loss, reconst_loss, kl_loss, cf_loss
+    losses = {'kl_loss': kl_loss, 'cf_loss': cf_loss, 'reconstr_loss': reconst_loss}
+    return reconst_loss + kl_loss + alpha * cf_loss + size_loss, reconst_loss, kl_loss, cf_loss
+
+def loss_proxy(reconstr_a, orig_a, y_pred, y_cf, mu, logvar, alpha, reconstr_mask, recons_mask_nobeta):
+
+    reconst_loss= F.binary_cross_entropy(reconstr_a, orig_a, reduction='mean')
+    kl_loss = (-0.5 * (1 + logvar - mu**2 - logvar.exp()).sum(-1)).mean()
+    
+    mse_loss = F.mse_loss(reconstr_mask, recons_mask_nobeta, reduction = "mean")
+    cf_loss =  F.cross_entropy(y_pred, y_cf)
+
+    return reconst_loss + kl_loss + alpha * cf_loss + mse_loss, reconst_loss, kl_loss, cf_loss
+
 
 def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta=1, device='cpu'):
     num_nodes = params['num_nodes']
 
     x, edge_index, edge_weights = inputs #x : batchsize x 25, 10   edge_index: 2x Einbatch
     #('x', x.shape, 'edge_index' , edge_index.shape)
-    reconstr_mask, z_mu, z_logvar = cf_explainer(inputs, beta=beta, y_cf=y_cf, batch=data.batch)
+
+    recons_mask_nobeta, _, _ = cf_explainer(inputs, beta=0, batch=data.batch)
+    reconstr_mask, mu, logvar = cf_explainer(inputs, beta=1, batch=data.batch)
+
     # reconstr mask: batchsize, 25*25
     # x: batchsize*25  batchsize, 25
     batch_size = reconstr_mask.shape[0]
@@ -92,9 +112,10 @@ def get_counterfactual(inputs, cf_explainer, clf_model, data, params, y_cf, beta
     assert(len(reconstr_adjs) == len(orig_adjs))
     all_cfs = list(zip(reconstr_adjs, orig_adjs))
 
-    return reconstr_a, orig_a, y_pred, z_mu, z_logvar, all_cfs
+    return reconstr_a, orig_a, y_pred, mu, logvar, recons_mask_nobeta, reconstr_mask, all_cfs
 
-def test(cf_explainer, clf_model, loader, params, device ,save=False):
+
+def test(cf_explainer, clf_model, loader, params, device, save=False, viz=False):
     cf_explainer.eval()
     total_loss_cf = 0
     correct = 0
@@ -103,19 +124,21 @@ def test(cf_explainer, clf_model, loader, params, device ,save=False):
         with torch.no_grad():
             x, edge_index, y_target  = data.x.to(device), data.edge_index.to(device), data.y.to(device)
             y_cf = 1 - y_target
-            reconstr_a, orig_a, y_pred, z_mu, z_logvar, all_batch_cfs = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
-            if save:
-                all_counterfactuals += all_batch_cfs
+            reconstr_a, orig_a, y_pred, mu, logvar, recons_mask_nobeta, reconstr_mask, all_cfs = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
             # Using the masked graph's edge weights
             y_pred_hard = y_pred.argmax(dim=1)
 
             correct += int((y_pred_hard == y_cf).sum())
-            loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, x, y_pred, y_cf, z_mu, z_logvar, alpha=1)
+            alpha = 1
+            loss_total, loss_reconstr, loss_kl, loss_cf = loss_proxy(reconstr_a, orig_a, y_pred, y_cf, mu, logvar, alpha, recons_mask_nobeta, reconstr_mask)
 
-            adj_reconst_binary = torch.bernoulli(reconstr_a)
-    if save:
-        with open('generated_cfs.pkl', 'wb') as f:
-            pkl.dump(all_counterfactuals, f)
+    if viz:      
+        for data in loader:
+            x, edge_index, y_target  = data.x.to(device), data.edge_index.to(device), data.y.to(device)
+            reconstr_a, orig_a, y_pred, mu, logvar, recons_mask_nobeta, reconstr_mask, all_cfs = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
+            cf_binary = torch.bernoulli(reconstr_a)
+            visualize_cfs(orig_a.squeeze(), cf_binary.squeeze())
+            print(y_pred.argmax(dim=1))
 
     return correct / len(loader.dataset), loss_reconstr, loss_kl, loss_cf 
 
@@ -132,11 +155,12 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
             optimizer_cf.zero_grad()
 
             #mask (or edge weight) is none atm
-            reconstr_a, orig_a, y_pred, z_mu, z_logvar, tmp = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
+            reconstr_a, orig_a, y_pred, mu, logvar, recons_mask_nobeta, reconstr_mask, all_cfs = get_counterfactual((x, edge_index, None), cf_explainer, clf_model, data, params, y_cf, beta=1)
             alpha = 1
+
             if epoch < args.vae_cf_epoch: #check this later
                 alpha = 0
-            loss_total, loss_reconstr, loss_kl, loss_cf = loss(reconstr_a, orig_a, x, y_pred, y_cf, z_mu, z_logvar, alpha)
+            loss_total, loss_reconstr, loss_kl, loss_cf = loss_proxy(reconstr_a, orig_a, y_pred, y_cf, mu, logvar, alpha, recons_mask_nobeta, reconstr_mask)
             loss_total.backward()
             optimizer_cf.step()
 
@@ -144,9 +168,9 @@ def train(clf_model, cf_explainer, optimizer_cf, train_loader, val_loader, test_
 
         cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, val_loader, params, device)
         print(f"Epoch {epoch + 1}/{args.epochs}, Loss: {loss_total.item()}, 'CF Acc': {cf_acc}, 'Recons loss: {test_reconstr}")
-    visualize_cfs(orig_a[0], torch.bernoulli(reconstr_a[0]))
 
-    cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, test_loader, params, device, save=True)
+
+    cf_acc, test_reconstr, test_loss_kl, test_loss_cf = test(cf_explainer, clf_model, test_loader, params, device, viz=True)
     print(f"Final Test: Loss: {loss_total.item()}, 'CF Acc': {cf_acc}, 'Recons loss: {test_reconstr}")
 
 
@@ -156,7 +180,7 @@ def run(args):
     load data for train, val, test
     """
     #dataset_name = args.dataset
-    dataset_name = 'BA-2motif-this-one-works'
+    dataset_name = 'BA-2motif-proxy'
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
@@ -175,11 +199,12 @@ def run(args):
               'num_nodes': num_nodes}
 
     clf_model = GCN(params['x_dim'], params['num_classes']).to(device)              # load clf
-    checkpoint = torch.load('model/pretrained/clf-good-both.pth')
-    clf_model.load_state_dict(checkpoint)
+    checkpoint = torch.load(f'model/pretrained/ba2_proxy')
+    clf_model.load_state_dict(checkpoint['model_state_dict'])
     clf_model.eval()                                                              
 
-    cf_explainer = GNN_MLP_VariationalAutoEncoder(params['x_dim'], params['num_nodes'] * params['num_nodes']).to(device)
+    #cf_explainer = GNN_MLP_VariationalAutoEncoder(params['x_dim'], params['num_nodes'] * params['num_nodes']).to(device)
+    cf_explainer = VGAE(params['x_dim'], params['num_nodes'] * params['num_nodes'])
 
     optimizer_cf = Adam(cf_explainer.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     

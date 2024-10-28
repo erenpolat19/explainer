@@ -8,9 +8,13 @@ from torch.optim import Adam
 from data_utils.data_preprocessing import *
 from data_utils.dataloader import *
 from visualize import *
+from evaluation.ood_eval import eval_graph_list
 
 from sklearn.metrics import roc_auc_score
 import os 
+
+def eval_ood(graphs, explanations, device='cpu'):
+    return eval_graph_list(graphs, explanations, methods=None)
 
 def eval_explain(clf_model, expl_model, dataloader, device='cpu', k=None):
     expl_model.eval()
@@ -64,8 +68,6 @@ def eval_acc(clf_model, expl_model, dataloader, device, args, v=False, k=None):
             masked_pred = clf_model(x, edge_index, edge_weights = expl_mask, batch=data.batch)   # Graph-level prediction
             y_pred = masked_pred.argmax(dim=1)
             correct += int((y_pred == y_target).sum())
-            
-        print('mask:', expl_mask.sum(), 'graph:', edge_index[0].shape)
     return correct / len(dataloader.dataset)
     
 

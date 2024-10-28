@@ -65,7 +65,8 @@ def visualize(graphs, expl_masks_split, top_k):
         # Add edges
         edges = graph_data['edges'].t().tolist()
         G.add_edges_from(edges)
-
+        
+        
         # Create a dictionary to store the maximum mask value for each undirected edge
         edge_importance = {}
 
@@ -229,19 +230,58 @@ def visualize_pred_vs_gt(graphs, expl_masks_split, edge_label, top_k=10):
         plt.show()
 
 
-def visualize_cfs(original_adj, counterfactual_adj):
+def visualize_cfs2(original_adj, counterfactual_adj):
 
     original_graph = nx.from_numpy_array(original_adj.cpu().detach().numpy())
     counterfactual_graph = nx.from_numpy_array(counterfactual_adj.cpu().detach().numpy())
 
+    #counterfactual_graph.remove_edges_from(nx.selfloop_edges(counterfactual_graph))
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     
     pos = nx.spring_layout(original_graph)
-    nx.draw(original_graph, pos, ax=axes[0], with_labels=False, node_color='lightblue', edge_color='gray', node_size=20)
+
+     # Plot the original graph
+    nx.draw(original_graph, pos, ax=axes[0], with_labels=True, labels={i: i for i in original_graph.nodes()},
+            node_color='lightblue', edge_color='gray', node_size=20, font_size=8)
     axes[0].set_title('Original Graph')
 
-    nx.draw(counterfactual_graph, pos, ax=axes[1], with_labels=False, node_color='lightgreen', edge_color='gray', node_size=20)
+    # Plot the counterfactual graph
+    nx.draw(counterfactual_graph, pos, ax=axes[1], with_labels=True, labels={i: i for i in counterfactual_graph.nodes()},
+            node_color='lightgreen', edge_color='gray', node_size=20, font_size=8)
     axes[1].set_title('Counterfactual Graph')
 
+    plt.tight_layout()
+    plt.show()
+import matplotlib.pyplot as plt
+import networkx as nx
+
+def visualize_cfs(original_adj, counterfactual_adj):
+    # Create graphs from adjacency matrices
+    original_graph = nx.from_numpy_array(original_adj.cpu().detach().numpy())
+    counterfactual_graph = nx.from_numpy_array(counterfactual_adj.cpu().detach().numpy())
+
+    # Remove self-loops from the counterfactual graph
+    counterfactual_graph.remove_edges_from(nx.selfloop_edges(counterfactual_graph))
+
+    # Set up the figure and axes
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    # Define the layout (node positions should be the same for both graphs for easier comparison)
+    pos = nx.spring_layout(original_graph)
+
+    # Plot the original graph
+    nx.draw(original_graph, pos, ax=axes[0], with_labels=False, 
+            node_color='lightblue', edge_color='gray', node_size=100)
+    nx.draw_networkx_labels(original_graph, pos, ax=axes[0], labels={i: i for i in original_graph.nodes()}, font_size=10)
+    axes[0].set_title('Original Graph')
+
+    # Plot the counterfactual graph
+    nx.draw(counterfactual_graph, pos, ax=axes[1], with_labels=False, 
+            node_color='lightgreen', edge_color='gray', node_size=100)
+    nx.draw_networkx_labels(counterfactual_graph, pos, ax=axes[1], labels={i: i for i in counterfactual_graph.nodes()}, font_size=10)
+    axes[1].set_title('Counterfactual Graph')
+
+    # Show the plot
     plt.tight_layout()
     plt.show()

@@ -5,6 +5,7 @@ from utils import *
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--seed', default=1, help='k')
+parser.add_argument('--epochs', default=2000, help='k', type=int)
 parser.add_argument
 args = parser.parse_args()
 
@@ -47,10 +48,12 @@ if __name__ == '__main__':
     parent_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
     data_dir = os.path.join(parent_dir, 'dataset')
 
-    dataset_name = 'BA-2motif'
-    #dataset_name = 'BA-2motif-this-one-works'
+    #dataset_name = 'BA-2motif'
+    dataset_name = 'BA-2motif-this-one-works'
     #dataset_name = 'mutag'
     data = get_dataset(data_dir, dataset_name)
+
+    config_path = os.path.join(current_dir, 'configs', 'models', f'model_ori_{data}')
 
 
     train_loader, val_loader, test_loader = get_dataloaders(data, args, batch_size=64, val_split=0.1, test_split=0.1)
@@ -58,7 +61,7 @@ if __name__ == '__main__':
     #print(data[1])
 
     early_stopping = 100 if dataset_name == 'mutag' else 500
-    epochs = 5000 
+    epochs = 2000 
 
 
     model = GCN(num_node_features,2).to(device)
@@ -69,7 +72,7 @@ if __name__ == '__main__':
     best_val_acc = 0
     best_model = None
     best_epoch = 0
-    for epoch in range(1, 5000):
+    for epoch in range(1, args.epochs):
         train_loss = train(model, criterion, optimizer, train_loader, device)
         train_acc = test(train_loader, model, device)
         val_acc = test(val_loader, model, device)
@@ -80,9 +83,9 @@ if __name__ == '__main__':
         #test_acc = test(test_loader, model, data, device)
         print(f'Epoch: {epoch:03d}, Train Acc: {train_acc:.4f}, Val Acc: {val_acc:.4f}')
         # Early stopping
-        if epoch - best_epoch > early_stopping and val_acc > 0.98:
+        if epoch - best_epoch > early_stopping:
             break
     print('Final test' , test(test_loader, model, device), f'best epoch {best_epoch}')
     
 
-    torch.save(model.state_dict(), f'model/pretrained/{dataset_name}/clf_{dataset_name}.pth')
+    torch.save(model.state_dict(), f'model/pretrained/clf-{dataset_name}.pth')
